@@ -1,67 +1,95 @@
-var app = require('express')();
-var http = require('http').createServer(app);
-var socket = require('socket.io').listen(http);
+/* CONFIGURAZIONE SERVER */
+const express = require('express')()
+const http = require('http')
+const server = http.Server(express)
+const socket = require('socket.io').listen(server)
 
-
-app.get("/",function(req,res){
-    res.send("Sono funzionante coglione")
+express.get("/",function(req,res){
+    res.send("Funzionante")
 })
-// ========================== MODELS
-var clients = new Array()
-var rooms = new Array()
-var indexFree = 0
-const port = 9091
 
+/* VARIABILI E STRUTTURE */
+var data
+var port = 8080
+var rooms = {
+    name:String,
+    admin:String,
+    channel: Number,
+    maxPlayer: Number
+}
+var listRooms = new Array(rooms)
+var gamers = new Array()
+var channel = 0
 
-// ========================== SOCKETS
-socket.on('connection',function(client, ack){
-    console.log("A client is connected")
-    clients.push(client)
+/* FUNZIONI */
+socket.on('connection',function(client){
+    console.log("A client is connected with id: "+client.id)
+    gamers.push(client)
+    console.log(gamers.length)
 
-    if(rooms.length > 0){
-        ack("amoree")
-    }
-    else{
-        ack("amoree")
-    }
-
-    /*FUNCTIONS*/
-    client.on("disconnect",function(){
-        let index = clients.indexOf(client)
-        clients.pop(index)
+    client.on('disconnect',function(){
+        console.log("A client is disconnect")
+        let index = gamers.indexOf(client)
+        if(client.disconnected){
+            console.log("client disconneted")
+            gamers.pop(index)
+            listRooms.pop(index)
+            client.emit('remove',index)
+        }
+        else if(client.id == listRooms[index].admin){
+            gamers.pop(index)
+            listRooms.pop(index)
+            client.emit('remove',index)
+            client.disconnect()
+            console.log(gamers.length)  
+            console.log("room name "+listRooms[index].name)
+            console.log("room deleted")
+        }
+        console.log("number gamers "+gamers.length)  
+        console.log("number rooms "+listRooms.length)
     })
-
-    client.on("create room",function(room){
-        if(rooms.includes(room.name)) {
-            ack("Not created")
+    
+    client.on('create',function(room){
+        if (listRooms.map.name == room){
+            console.log("the room name exist")
         }
         else{
-            let newRoom = room
-            newRoom.channel = indexFree
-            indexFree = indexFree + 1
-            rooms.push(newRoom)
-            client.room = newRoom.channel
-            client.join()
-            ack("Created")
+            console.log("creating room\n")
+            var index = gamers.indexOf(client)
+            var newRoom = rooms
+            newRoom.channel = channel
+            newRoom.name = room
+            newRoom.admin = client.id
+            channel++
+            listRooms.push(newRoom)
+            client.join(channel)
+            console.log(listRooms)
+            console.log("room name: "+listRooms[index].name)
+            console.log("channel: "+listRooms[index].channel)
+            console.log("id admin: "+listRooms[index].admin)
+            console.log("room lenght "+listRooms.length)
+            console.log("Room created and joined\n")
+            console.log("client channel "+client.room)
+            
         }
-    });
-
-    client.on('join', function(room) {
-        console.log("A client joined on channel: " + room.channel)
-        client.room = room.channel
-        client.join()
-        ack("Joined")
-    });
-
-    client.on("exit rooms", function() {
-        client.leave()
-        ack("Exit succesfully")
-    });
+    })
+   
+    client.emit('lists',listRooms)
+   
+    client.on('join room',function(room){
+        console.log("entrato in join")
+        console.log(listRooms)
+         for(i=0;i<listRooms.length;i++){
+            if(listRooms[i].name == room){
+                client.room=listRooms[i].channel
+            }
+        }
+        client.join(client.room)
+        console.log("client joined at: "+client.room)
+     })
 })
 
-
-
-//============================ LISTENERS
-http.listen(port, function() {
-    console.log("Server socket in listeing on port "+port)
-});
+/* LISTENER */
+server.listen(port,function(){
+    console.log("Server listen on port " + port)
+})
